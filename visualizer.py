@@ -5,19 +5,42 @@ from pyglet.gl import GL_QUADS, GL_POINTS
 WINDOW_HEIGHT = 600 # pixel height of viewer window
 WINDOW_WIDTH = int((2 / 3) * WINDOW_HEIGHT) # pixel width of viewer window
 CIRCLE_VERTS = 1440 # number of vertices used to draw top view circle
-TOPX = int(WINDOW_WIDTH / 2) # x coord of center of top view
-TOPY = int((7 / 9) * WINDOW_HEIGHT) # y coord of center of top view
-BOTTOMX = int(WINDOW_WIDTH / 2) # x coord of center of side view
-BOTTOMY = int(WINDOW_HEIGHT / 3) # y coord of center of side view
-RADIUS = int(WINDOW_WIDTH / 4) # radius of both views
-HEIGHT = int((4 / 9) * WINDOW_HEIGHT) # height in pixels of side on view
 MAXANGLE = 270 # maximum angle the probe/emitter can rotate
-DC_LENGTH = int((0.5 / 9) * WINDOW_HEIGHT) # side length of DACI emitter
-US_LENGTH = int((0.5 / 9) * WINDOW_HEIGHT) # side length of ultrasound probe
 DC_COLOUR = (255, 255, 255) # RGB colour code for DACI emitter
 US_COLOUR = (255, 0, 0) # RGB colour code for ultrasound probe
-FONTSIZE = int(WINDOW_HEIGHT / 64)
-LOC = (0.5 / 9) * WINDOW_HEIGHT
+TOPX = 0 # x coord of center of top view
+TOPY = 0 # y coord of center of top view
+BOTTOMX = 0 # x coord of center of side view
+BOTTOMY = 0 # y coord of center of side view
+RADIUS = 0 # radius of both views
+HEIGHT = 0 # height in pixels of side on view
+DC_LENGTH = 0 # side length of DACI emitter
+US_LENGTH = 0 # side length of ultrasound probe
+FONTSIZE = 0 # Legend/label font
+LOC = 0 # general purpose value to help locate things
+
+def update_values(window_width, window_height):
+    """
+    Given new window width and height update the size/location of the probe,
+    emitter, side view, top view, and labels.
+    """
+    global WINDOW_HEIGHT, WINDOW_WIDTH, TOPX, TOPY, BOTTOMX, BOTTOMY, RADIUS
+    global HEIGHT, DC_LENGTH, US_LENGTH, FONTSIZE, LOC
+
+    WINDOW_HEIGHT = window_height
+    WINDOW_WIDTH = window_width
+    CIRCLE_VERTS = 1440
+    TOPX = int(window_width / 2)
+    TOPY = int((7 / 9) * window_height)
+    BOTTOMX = int(window_width / 2)
+    BOTTOMY = int(window_height / 3)
+    RADIUS = int(window_width / 4)
+    HEIGHT = int((4 / 9) * window_height)
+    MAXANGLE = 270
+    DC_LENGTH = int((0.5 / 9) * window_height)
+    US_LENGTH = int((0.5 / 9) * window_height)
+    FONTSIZE = int(window_height / 64)
+    LOC = (0.5 / 9) * window_height
 
 def angle_to_xy(angle, cx, cy, r):
     rads = math.radians(angle)
@@ -93,6 +116,9 @@ def redraw_side_view(height, radius):
                   DC_LENGTH, DC_COLOUR)
     return ultrasound, daci
 
+update_values(WINDOW_WIDTH, WINDOW_HEIGHT)
+window = pyglet.window.Window(WINDOW_WIDTH, WINDOW_HEIGHT, resizable=True)
+
 z = 0
 r = RADIUS
 h = HEIGHT
@@ -100,7 +126,7 @@ step = 0
 # TODO: update this with code that gets real values from device
 def get_new_values():
     """
-    Produce values for demoing visualizer
+    Produce values for demoing visualizer.
     """
     global z, r, h, step
 
@@ -136,26 +162,38 @@ def get_new_values():
             step = (step + 1) % 7
     return z, r, h
 
+def make_background():
+    """
+    Return a graphic batch containing the top/side view outlines, the legend,
+    and the labels.
+    """
+    bg = pyglet.graphics.Batch() # batch of graphics that make up the background
+    bg = circle(CIRCLE_VERTS, TOPX, TOPY, RADIUS, batch=bg)
+    bg = rectangle(BOTTOMX, BOTTOMY, 2 * RADIUS, HEIGHT, batch=bg)
+    bg = square(LOC // 2, LOC, US_LENGTH // 2, US_COLOUR, batch=bg)
+    bg = square(LOC // 2, LOC // 2, DC_LENGTH // 2, DC_COLOUR, batch=bg)
 
-window = pyglet.window.Window(WINDOW_WIDTH, WINDOW_HEIGHT)
+    us_label = pyglet.text.Label('Ultrasound Probe', font_size=FONTSIZE,
+                                 x=LOC, y=LOC, batch=bg)
+    dc_label = pyglet.text.Label('DACI Emitter', font_size=FONTSIZE, x=LOC,
+                                 y=LOC // 2,
+                                 batch=bg)
+    top_label = pyglet.text.Label('Top View:', font_size=FONTSIZE, x=5,
+                                  y=WINDOW_HEIGHT - (LOC // 2), batch=bg)
+    bottom_label = pyglet.text.Label('Side View:', font_size=FONTSIZE, x=5,
+                                     y=(WINDOW_HEIGHT // 2) + LOC, batch=bg)
+    return bg
 
-bg = pyglet.graphics.Batch() # batch of graphics that make up the background
-bg = circle(CIRCLE_VERTS, TOPX, TOPY, RADIUS, batch=bg)
-bg = rectangle(BOTTOMX, BOTTOMY, 2 * RADIUS, HEIGHT, batch=bg)
-bg = square(LOC // 2, LOC, US_LENGTH // 2, US_COLOUR, batch=bg)
-bg = square(LOC // 2, LOC // 2, DC_LENGTH // 2, DC_COLOUR, batch=bg)
+bg = make_background()
 
-us_label = pyglet.text.Label('Ultrasound Probe', font_size=FONTSIZE,
-                             x=LOC, y=LOC, batch=bg)
-dc_label = pyglet.text.Label('DACI Emitter', font_size=FONTSIZE, x=LOC,
-                             y=LOC // 2,
-                             batch=bg)
-top_label = pyglet.text.Label('Top View:', font_size=FONTSIZE, x=5,
-                              y=WINDOW_HEIGHT - (LOC // 2), batch=bg)
-bottom_label = pyglet.text.Label('Side View:', font_size=FONTSIZE, x=5,
-                                 y=(WINDOW_HEIGHT // 2) + LOC, batch=bg)
+@window.event
+def on_resize(width, height):
+    update_values(width, height)
+    global bg
+    bg = make_background()
+    update(0)
 
-
+@window.event
 def update(dt):
     window.clear()
     bg.draw()
