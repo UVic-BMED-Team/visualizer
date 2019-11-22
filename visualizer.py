@@ -1,9 +1,11 @@
+import numpy as np
 import math
 import pyglet
 from pyglet.gl import GL_QUADS, GL_POINTS
+import skimage
 
 WINDOW_HEIGHT = 600 # pixel height of viewer window
-WINDOW_WIDTH = int((2 / 3) * WINDOW_HEIGHT) # pixel width of viewer window
+WINDOW_WIDTH = WINDOW_HEIGHT # pixel width of viewer window
 CIRCLE_VERTS = 1440 # number of vertices used to draw top view circle
 MAXANGLE = 270 # maximum angle the probe/emitter can rotate
 DC_COLOUR = (255, 255, 255) # RGB colour code for DACI emitter
@@ -18,6 +20,11 @@ DC_LENGTH = 0 # side length of DACI emitter
 US_LENGTH = 0 # side length of ultrasound probe
 FONTSIZE = 0 # Legend/label font
 LOC = 0 # general purpose value to help locate things
+IMAGEX = 0 # x location of ultrasound image
+IMAGEY = 0 # y location of ultrasound image
+IMAGESHAPE = 0 # square side length of ultrasound image in pixels
+US_IMAGE_HEIGHT = 32
+US_IMAGE_WIDTH = 32
 
 def update_values(window_width, window_height):
     """
@@ -25,22 +32,26 @@ def update_values(window_width, window_height):
     emitter, side view, top view, and labels.
     """
     global WINDOW_HEIGHT, WINDOW_WIDTH, TOPX, TOPY, BOTTOMX, BOTTOMY, RADIUS
-    global HEIGHT, DC_LENGTH, US_LENGTH, FONTSIZE, LOC
+    global HEIGHT, DC_LENGTH, US_LENGTH, FONTSIZE, LOC, IMAGEX, IMAGEY
+    global IMAGESHAPE
 
     WINDOW_HEIGHT = window_height
     WINDOW_WIDTH = window_width
     CIRCLE_VERTS = 1440
-    TOPX = int(window_width / 2)
+    TOPX = int(1.2 * (window_width / 8))
     TOPY = int((7 / 9) * window_height)
-    BOTTOMX = int(window_width / 2)
+    BOTTOMX = int(1.2 * (window_width / 8))
     BOTTOMY = int(window_height / 3)
-    RADIUS = int(window_width / 4)
+    RADIUS = int(window_width / 8)
     HEIGHT = int((4 / 9) * window_height)
     MAXANGLE = 270
     DC_LENGTH = int((0.5 / 9) * window_height)
     US_LENGTH = int((0.5 / 9) * window_height)
     FONTSIZE = int(window_height / 64)
     LOC = (0.5 / 9) * window_height
+    IMAGESHAPE = int(0.99 * (0.625 * window_width))
+    IMAGEX = int((0.625 * window_width) - (IMAGESHAPE / 2)) + 25
+    IMAGEY = int((window_height / 2) - (IMAGESHAPE / 2))
 
 def angle_to_xy(angle, cx, cy, r):
     rads = math.radians(angle)
@@ -162,6 +173,28 @@ def get_new_values():
             step = (step + 1) % 7
     return z, r, h
 
+# TODO: overwrite this with actual data from ultrasound
+# TODO: parameters are just to generate demo data, real method should just take
+# a single 3d numpy array and then display it
+def get_ultrasound_image(angle, max_angle, height, max_height, zoom, max_zoom):
+    data = skimage.data.astronaut() # load test image
+    x = int(data.shape[0] // 2 * (zoom / max_zoom))
+    y = int(data.shape[1] // 2 * (zoom / max_zoom))
+    data = data[x:, y:]
+    data = skimage.transform.resize(data, (IMAGESHAPE, IMAGESHAPE))
+    data = skimage.util.img_as_ubyte(data) # convert to 8bit unsigned int
+    roll_by1 = int((angle / max_angle) * data.shape[0])
+    roll_by0 = int((height / max_height) * data.shape[1])
+
+    # everything below this is necessary to display a 3d numpy array as an RGB
+    data = data[::-1] # flip image because byte conversion will also flip it
+    data = np.roll(data, roll_by1, axis=1)
+    data = np.roll(data, roll_by0, axis=0)
+    data = data.tobytes() # convert to byte string
+    im = pyglet.image.ImageData(IMAGESHAPE, IMAGESHAPE, 'RGB', data)
+    im_sprite = pyglet.sprite.Sprite(im, IMAGEX, IMAGEY)
+    return im_sprite
+
 def make_background():
     """
     Return a graphic batch containing the top/side view outlines, the legend,
@@ -181,7 +214,7 @@ def make_background():
     top_label = pyglet.text.Label('Top View:', font_size=FONTSIZE, x=5,
                                   y=WINDOW_HEIGHT - (LOC // 2), batch=bg)
     bottom_label = pyglet.text.Label('Side View:', font_size=FONTSIZE, x=5,
-                                     y=(WINDOW_HEIGHT // 2) + LOC, batch=bg)
+                                     y=(WINDOW_HEIGHT // 2) + (2 * LOC), batch=bg)
     return bg
 
 bg = make_background()
@@ -191,7 +224,7 @@ def on_resize(width, height):
     update_values(width, height)
     global bg
     bg = make_background()
-    update(0)
+    update(1)
 
 @window.event
 def update(dt):
@@ -207,6 +240,10 @@ def update(dt):
     bottom_us, bottom_daci = redraw_side_view(height, radius)
     bottom_us.draw()
     bottom_daci.draw()
+
+    ultrasound_image = get_ultrasound_image(angle, 360, height, HEIGHT,
+                                            RADIUS - radius, RADIUS)
+    ultrasound_image.draw()
 
 pyglet.clock.schedule_interval(update, 1 / 120)
 pyglet.app.run()
